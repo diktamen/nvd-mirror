@@ -42,12 +42,29 @@ jobs:
         run: echo "date=$(date -u +'%Y%m%d%H%M')" >> $GITHUB_OUTPUT
 
       - name: Restore NVD database cache
+        id: nvd-cache
         uses: actions/cache/restore@v5
         with:
           path: ${{ github.workspace }}/dc-data
           key: nvd-data-${{ runner.os }}-${{ steps.date.outputs.date }}
           restore-keys: |
             nvd-data-${{ runner.os }}-
+
+      - name: Seed from last release if no cache
+        # Caches get evicted (7 days unused / 10 GB repo limit); the last published database
+        # is just as good a starting point, so a full ~5 h NVD download only ever happens once.
+        if: steps.nvd-cache.outputs.cache-matched-key == ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p seed && cd seed
+          if gh release download nvd-data-latest -p 'nvd-database.tar.gz*' && sha256sum -c nvd-database.tar.gz.sha256; then
+            tar -xzf nvd-database.tar.gz -C "$GITHUB_WORKSPACE"
+            echo "Seeded dc-data from the nvd-data-latest release"
+          else
+            echo "::warning::No cache and no usable release; doing a full NVD download"
+          fi
+          cd .. && rm -rf seed
 
       - name: Download/Update NVD Database
         env:
@@ -63,6 +80,14 @@ jobs:
         with:
           path: ${{ github.workspace }}/dc-data
           key: nvd-data-${{ runner.os }}-${{ steps.date.outputs.date }}
+
+      - name: Prune older NVD caches
+        # Every run saves a new ~115 MB cache; keep only the newest two
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh cache list --key "nvd-data-${{ runner.os }}-" --sort created_at --order desc --limit 100 --json id --jq '.[2:][].id' \
+            | xargs -r -n1 gh cache delete
 
       - name: Compress database
         run: |
