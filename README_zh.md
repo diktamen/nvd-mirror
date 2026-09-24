@@ -10,21 +10,21 @@ OWASP Dependency-Check 在扫描依赖之前需要下载完整的 NVD 数据库�
 
 ## 工作原理
 
-1. GitHub Actions 工作流在**每周一 02:00 UTC** 自动运行（也支持手动触发）。
+1. GitHub Actions 工作流在**每天 00:00 UTC** 自动运行（也支持手动触发）。
 2. 使用 `dependency-check-maven` 插件下载/更新完整的 NVD 数据库。
 3. 数据库在多次运行之间通过缓存实现增量更新。
 4. 最终结果压缩为 `nvd-database.tar.gz`，以 `nvd-data-latest` 标签发布为 GitHub Release。
 
 ## 下载
 
-从 [Releases 页面](https://github.com/chenhuawei/nvd-mirror/releases/tag/nvd-data-latest) 下载最新的数据库归档文件。
+从 [Releases 页面](https://github.com/diktamen/nvd-mirror/releases/tag/nvd-data-latest) 下载最新的数据库归档文件。
 
 ## 使用方法
 
 1. 下载并解压归档文件：
 
    ```bash
-   wget https://github.com/chenhuawei/nvd-mirror/releases/download/nvd-data-latest/nvd-database.tar.gz
+   wget https://github.com/diktamen/nvd-mirror/releases/download/nvd-data-latest/nvd-database.tar.gz
    tar -xzf nvd-database.tar.gz
    ```
 
@@ -34,7 +34,6 @@ OWASP Dependency-Check 在扫描依赖之前需要下载完整的 NVD 数据库�
    ```bash
    mvn org.owasp:dependency-check-maven:check \
      -DdataDirectory=./dc-data \
-     -Dscan=./your-project
    ```
 
    **pom.xml 配置：**
@@ -42,7 +41,7 @@ OWASP Dependency-Check 在扫描依赖之前需要下载完整的 NVD 数据库�
    <plugin>
      <groupId>org.owasp</groupId>
      <artifactId>dependency-check-maven</artifactId>
-     <version>12.2.2</version>
+     <version>13.0.0</version>
      <configuration>
        <dataDirectory>/path/to/dc-data</dataDirectory>
      </configuration>
@@ -52,7 +51,7 @@ OWASP Dependency-Check 在扫描依赖之前需要下载完整的 NVD 数据库�
 ## 技术栈
 
 - **Java 17** (Temurin)
-- **Maven** + OWASP Dependency-Check Maven Plugin 12.2.2
+- **Maven** + OWASP Dependency-Check Maven Plugin 13.0.0
 - **GitHub Actions**（定时 CI 流水线）
 - **GitHub Releases**（制品分发）
 
@@ -60,7 +59,7 @@ OWASP Dependency-Check 在扫描依赖之前需要下载完整的 NVD 数据库�
 
 | 配置项 | 值 | 说明 |
 |--------|-----|------|
-| 定时任务 | `0 2 * * 1`（每周一 02:00 UTC） | 每周自动更新 |
+| 定时任务 | `0 0 * * *`（每天 00:00 UTC） | 每天增量更新；工作流会自动重新启用，避免 60 天无活动被禁用 |
 | NVD API 延迟 | 500ms | 符合速率限制要求 |
 | 数据目录 | `dc-data/` | NVD 数据库存储位置 |
 | Release 标签 | `nvd-data-latest` | 始终指向最新构建 |

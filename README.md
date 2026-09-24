@@ -10,21 +10,21 @@ OWASP Dependency-Check needs to download the full NVD database before scanning d
 
 ## How It Works
 
-1. A GitHub Actions workflow runs **every Monday at 02:00 UTC** (also supports manual trigger).
-2. It uses the `dependency-check-maven` plugin to download/update the full NVD database.
+1. A GitHub Actions workflow runs **daily at 00:00 UTC** (also supports manual trigger).
+2. It uses the `dependency-check-maven` plugin (`update-only` goal) to download/update the full NVD database.
 3. The database is cached across runs for incremental updates.
-4. The result is compressed into `nvd-database.tar.gz` and published as a GitHub Release under the tag `nvd-data-latest`.
+4. The result is compressed into `nvd-database.tar.gz` (plus a `.sha256` checksum) and uploaded in place to the GitHub Release `nvd-data-latest`, so the download URL is always valid.
 
 ## Download
 
-Download the latest database archive from the [Releases page](https://github.com/chenhuawei/nvd-mirror/releases/tag/nvd-data-latest).
+Download the latest database archive from the [Releases page](https://github.com/diktamen/nvd-mirror/releases/tag/nvd-data-latest).
 
 ## Usage
 
 1. Download and extract the archive:
 
    ```bash
-   wget https://github.com/chenhuawei/nvd-mirror/releases/download/nvd-data-latest/nvd-database.tar.gz
+   wget https://github.com/diktamen/nvd-mirror/releases/download/nvd-data-latest/nvd-database.tar.gz
    tar -xzf nvd-database.tar.gz
    ```
 
@@ -33,8 +33,15 @@ Download the latest database archive from the [Releases page](https://github.com
    **Maven CLI:**
    ```bash
    mvn org.owasp:dependency-check-maven:check \
-     -DdataDirectory=./dc-data \
-     -Dscan=./your-project
+     -DdataDirectory=./dc-data
+   ```
+
+   **dependency-check CLI** (the CLI distribution keeps its database in `lib/data/11.0`):
+   ```bash
+   mkdir -p dependency-check/lib/data/11.0
+   curl -fsSL https://github.com/diktamen/nvd-mirror/releases/download/nvd-data-latest/nvd-database.tar.gz \
+     | tar -xz --strip-components=1 -C dependency-check/lib/data/11.0
+   dependency-check/bin/dependency-check.sh --updateonly --nvdApiKey "$NVD_API_KEY"   # incremental update only
    ```
 
    **pom.xml:**
@@ -42,7 +49,7 @@ Download the latest database archive from the [Releases page](https://github.com
    <plugin>
      <groupId>org.owasp</groupId>
      <artifactId>dependency-check-maven</artifactId>
-     <version>12.2.2</version>
+     <version>13.0.0</version>
      <configuration>
        <dataDirectory>/path/to/dc-data</dataDirectory>
      </configuration>
@@ -52,7 +59,7 @@ Download the latest database archive from the [Releases page](https://github.com
 ## Tech Stack
 
 - **Java 17** (Temurin)
-- **Maven** + OWASP Dependency-Check Maven Plugin 12.2.2
+- **Maven** + OWASP Dependency-Check Maven Plugin 13.0.0
 - **GitHub Actions** (scheduled CI pipeline)
 - **GitHub Releases** (artifact distribution)
 
@@ -60,7 +67,7 @@ Download the latest database archive from the [Releases page](https://github.com
 
 | Setting | Value | Description |
 |---------|-------|-------------|
-| Schedule | `0 2 * * 1` (Mon 02:00 UTC) | Weekly automatic update |
+| Schedule | `0 0 * * *` (daily 00:00 UTC) | Daily incremental update; the workflow re-enables itself so the 60-day inactivity rule never switches it off |
 | NVD API Delay | 500ms | Rate limit compliance |
 | Data Directory | `dc-data/` | NVD database storage location |
 | Release Tag | `nvd-data-latest` | Always points to the latest build |
