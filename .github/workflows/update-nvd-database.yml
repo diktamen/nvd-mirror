@@ -2,18 +2,24 @@ name: Update NVD Database
 
 on:
   schedule:
-    - cron: '0 2 * * 1'  
-  workflow_dispatch: 
+    # Daily, finished well before the docker-ci nightly OWASP image build (02:11 UTC)
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # 提前适配 Node.js 24
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: update-nvd
+  cancel-in-progress: false
 
 jobs:
   update-nvd:
     runs-on: ubuntu-latest
     timeout-minutes: 720
     permissions:
-      contents: write
+      contents: write   # publish the release asset
+      actions: write    # keep-alive: re-enable this workflow
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -33,7 +39,7 @@ jobs:
 
       - name: Get current date
         id: date
-        run: echo "date=$(date +'%Y%m%d%H%M')" >> $GITHUB_OUTPUT
+        run: echo "date=$(date -u +'%Y%m%d%H%M')" >> $GITHUB_OUTPUT
 
       - name: Restore NVD database cache
         uses: actions/cache/restore@v5
@@ -44,14 +50,13 @@ jobs:
             nvd-data-${{ runner.os }}-
 
       - name: Download/Update NVD Database
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
-          mkdir -p empty-scan
-          mvn org.owasp:dependency-check-maven:check \
-            -DnvdApiKey=${{ secrets.NVD_API_KEY }} \
+          mvn -B org.owasp:dependency-check-maven:update-only \
+            -DnvdApiKey="$NVD_API_KEY" \
             -DnvdApiDelay=500 \
-            -DfailBuildOnCVSS=11 \
-            -DdataDirectory=${{ github.workspace }}/dc-data \
-            -Dscan=${{ github.workspace }}/empty-scan
+            -DdataDirectory="$GITHUB_WORKSPACE/dc-data"
 
       - name: Save NVD database cache
         uses: actions/cache/save@v5
@@ -60,15 +65,27 @@ jobs:
           key: nvd-data-${{ runner.os }}-${{ steps.date.outputs.date }}
 
       - name: Compress database
-        run: tar -czf nvd-database.tar.gz -C ${{ github.workspace }} dc-data
-
-      - name: Create or update Release
         run: |
-          # 如果 tag 已存在则删除重建
-          gh release delete nvd-data-latest --yes 2>/dev/null || true
-          gh release create nvd-data-latest \
-            --title "NVD Database Latest" \
-            --notes "Updated at ${{ github.run_id }}" \
-            nvd-database.tar.gz
+          tar -czf nvd-database.tar.gz -C "$GITHUB_WORKSPACE" dc-data
+          sha256sum nvd-database.tar.gz > nvd-database.tar.gz.sha256
+
+      - name: Publish release asset
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Replace the assets in place so the download URL never 404s mid-update
+          if gh release view nvd-data-latest >/dev/null 2>&1; then
+            gh release upload nvd-data-latest nvd-database.tar.gz nvd-database.tar.gz.sha256 --clobber
+            gh release edit nvd-data-latest --notes "Updated $(date -u +'%Y-%m-%d %H:%M UTC') by run ${{ github.run_id }}"
+          else
+            gh release create nvd-data-latest \
+              --title "NVD Database Latest" \
+              --notes "Updated $(date -u +'%Y-%m-%d %H:%M UTC') by run ${{ github.run_id }}" \
+              nvd-database.tar.gz nvd-database.tar.gz.sha256
+          fi
+
+      - name: Keep scheduled workflow alive
+        # GitHub disables scheduled workflows after 60 days without repository activity
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/update-nvd-database.yml/enable"
