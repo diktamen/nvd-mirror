@@ -36,11 +36,11 @@ Download the latest database archive from the [Releases page](https://github.com
      -DdataDirectory=./dc-data
    ```
 
-   **dependency-check CLI** (the CLI distribution keeps its database in `lib/data/11.0`):
+   **dependency-check CLI** (the CLI distribution keeps its database in `data/`):
    ```bash
-   mkdir -p dependency-check/lib/data/11.0
+   mkdir -p dependency-check/data
    curl -fsSL https://github.com/diktamen/nvd-mirror/releases/download/nvd-data-latest/nvd-database.tar.gz \
-     | tar -xz --strip-components=1 -C dependency-check/lib/data/11.0
+     | tar -xz --strip-components=1 -C dependency-check/data
    dependency-check/bin/dependency-check.sh --updateonly --nvdApiKey "$NVD_API_KEY"   # incremental update only
    ```
 
